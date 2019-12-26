@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::str::FromStr;
 
 enum Mode {
@@ -11,7 +12,7 @@ enum Operation {
 }
 
 impl Operation {
-    fn op(&self, a: u64, b: u64) -> u64 {
+    fn op(&self, a: i64, b: i64) -> i64 {
         match self {
             Operation::Adder => a + b,
             Operation::Multiplier => a * b,
@@ -22,13 +23,13 @@ impl Operation {
 #[derive(Debug)]
 struct ModeParseError;
 
-impl FromStr for Mode {
-    type Err = ModeParseError;
+impl TryFrom<char> for Mode {
+    type Error = ModeParseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "0" => Ok(Mode::Position),
-            "1" => Ok(Mode::Immediate),
+    fn try_from(c: char) -> Result<Self, Self::Error> {
+        match c {
+            '0' => Ok(Mode::Position),
+            '1' => Ok(Mode::Immediate),
             _ => Err(ModeParseError),
         }
     }
@@ -62,16 +63,15 @@ impl Instruction {
 
 #[derive(Debug, Copy, Clone)]
 pub enum Cell<'a> {
-    Value(u64),
+    Value(i64),
     Symbol(&'a str),
 }
 
-// TODO: Default variant should be Symbol
 impl<'a> Cell<'_> {
-    fn value(&self) -> u64 {
+    fn value(&self) -> i64 {
         match self {
             Cell::Value(v) => *v,
-            _ => panic!("Cannot load value from a symbol!"),
+            Cell::Symbol(s) => s.parse::<i64>().unwrap(),
         }
     }
 
@@ -86,7 +86,6 @@ impl<'a> Cell<'_> {
 #[derive(Debug)]
 struct InstructionParseError;
 
-// TODO: Faster parsing if already int?
 impl FromStr for Instruction {
     type Err = InstructionParseError;
 
@@ -99,15 +98,11 @@ impl FromStr for Instruction {
             s.split_at(len - 1)
         };
 
-        // How to reverse without allocating (rev chars?)
-        let mut modes = modes
-            .split("")
-            .filter(|&s| s != "")
-            .map(|s| s.parse::<Mode>().unwrap());
+        let mut modes = modes.chars().rev().map(|s| Mode::try_from(s).unwrap());
 
         let mut next_mode = || modes.next().unwrap_or(Mode::Position);
 
-        match opcode.parse::<u64>().unwrap() {
+        match opcode.parse::<i64>().unwrap() {
             1 => Ok(Instruction::add(next_mode(), next_mode())),
             2 => Ok(Instruction::mul(next_mode(), next_mode())),
             3 => Ok(Instruction::Input),
@@ -124,16 +119,10 @@ pub struct IntCodeMachine {
     outputs: Vec<i64>,
 }
 
-// TODO: Replace symbol with value
-fn load(tape: &[Cell], cursor: usize, offset: usize, mode: Mode) -> u64 {
-    let cell = match mode {
-        Mode::Immediate => tape[cursor + offset],
-        Mode::Position => tape[tape[cursor + offset].value() as usize],
-    };
-
-    match cell {
-        Cell::Value(v) => v,
-        Cell::Symbol(s) => s.parse::<u64>().unwrap(),
+fn load(tape: &[Cell], cursor: usize, offset: usize, mode: Mode) -> i64 {
+    match mode {
+        Mode::Immediate => tape[cursor + offset].value(),
+        Mode::Position => tape[tape[cursor + offset].value() as usize].value(),
     }
 }
 
@@ -142,11 +131,12 @@ impl IntCodeMachine {
         self.inputs.push(input);
     }
 
-    pub fn diagnostic(&self) -> Option<i64> {
+    pub fn diagnostic_code(&self) -> Option<i64> {
         self.outputs.last().copied()
     }
 
     pub fn errors(&self) -> bool {
+        dbg!(&self.outputs);
         let len = self.outputs.len();
         self.outputs[..len - 1].iter().any(|&output| output != 0)
     }
@@ -156,20 +146,28 @@ impl IntCodeMachine {
         self.outputs.clear();
     }
 
-    pub fn run(&mut self, tape: &mut [Cell]) -> u64 {
+    pub fn run(&mut self, tape: &mut [Cell]) -> i64 {
         let mut cursor = 0;
 
         loop {
-            let instruction = tape[cursor].instruction();
-            match instruction {
+            match tape[cursor].instruction() {
                 Instruction::Add { a, b, alu } | Instruction::Mul { a, b, alu } => {
                     let a = load(tape, cursor, 1, a);
                     let b = load(tape, cursor, 2, b);
-                    tape[tape[cursor + 3].value() as usize] = Cell::Value(alu.op(a, b));
+                    tape[tape[cursor + 3].value() as usize] = Cell::Value({ alu.op(a, b) });
                     cursor += 4
                 }
                 Instruction::Halt => break,
-                _ => unreachable!(),
+                Instruction::Input => {
+                    let input = self.inputs.pop().expect("Not enough inputs provided!");
+                    tape[tape[cursor + 1].value() as usize] = Cell::Value(input);
+                    cursor += 2;
+                }
+                Instruction::Output { a } => {
+                    let v = load(tape, cursor, 1, a);
+                    self.outputs.push(v);
+                    cursor += 2
+                }
             }
         }
 

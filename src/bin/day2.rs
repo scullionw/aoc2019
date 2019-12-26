@@ -5,12 +5,8 @@ use benchtest::benchtest;
 
 const INPUT: &str = include_str!("data/day2.txt");
 
-fn puzzle_a(input: &str) -> u64 {
-    let mut intcodes: Vec<_> = input
-        .trim()
-        .split(',')
-        .map(|s| Cell::Value(s.parse::<u64>().unwrap()))
-        .collect();
+fn puzzle_a(input: &str) -> i64 {
+    let mut intcodes: Vec<_> = input.trim().split(',').map(Cell::Symbol).collect();
 
     intcodes[1] = Cell::Value(12);
     intcodes[2] = Cell::Value(2);
@@ -18,12 +14,8 @@ fn puzzle_a(input: &str) -> u64 {
     IntCodeMachine::default().run(&mut intcodes)
 }
 
-fn puzzle_b(input: &str) -> u64 {
-    let intcodes: Vec<_> = input
-        .trim()
-        .split(',')
-        .map(|s| Cell::Value(s.parse::<u64>().unwrap()))
-        .collect();
+fn puzzle_b(input: &str) -> i64 {
+    let intcodes: Vec<_> = input.trim().split(',').map(Cell::Symbol).collect();
 
     let mut machine = IntCodeMachine::default();
 

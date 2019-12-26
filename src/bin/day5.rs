@@ -1,26 +1,26 @@
 #![feature(test)]
 
-use aoc2019::IntCodeMachine;
+use aoc2019::{Cell, IntCodeMachine};
 use benchtest::benchtest;
 
-const INPUT: &str = include_str!("data/day2.txt");
+const INPUT: &str = include_str!("data/day5.txt");
 
-fn puzzle_a(input: &str) -> u64 {
-    // let mut intcodes: Vec<_> = input
-    //     .trim()
-    //     .split(',')
-    //     .map(|s| s.parse::<u64>().unwrap())
-    //     .collect();
+fn puzzle_a(input: &str) -> i64 {
+    let mut intcodes: Vec<_> = input.trim().split(',').map(Cell::Symbol).collect();
 
-    // intcodes[1] = 12;
-    // intcodes[2] = 2;
+    let mut machine = IntCodeMachine::default();
 
-    // IntCodeMachine::run(&mut intcodes)
+    machine.add_input(1);
+    machine.run(&mut intcodes);
 
-    todo!()
+    if machine.errors() {
+        panic!("Errors detected!");
+    };
+
+    machine.diagnostic_code().unwrap()
 }
 
-fn puzzle_b(input: &str) -> u64 {
+fn puzzle_b(input: &str) -> i64 {
     todo!()
 }
 
@@ -29,7 +29,7 @@ fn main() {
     // println!("{}", puzzle_b(INPUT));
 }
 
-// benchtest! {
-//     puzzle_a_test: puzzle_a(INPUT) => 3654868,
-//     puzzle_b_test: puzzle_b(INPUT) => 7014
-// }
+benchtest! {
+    puzzle_a_test: puzzle_a(INPUT) => 12896948
+    // puzzle_b_test: puzzle_b(INPUT) => 7014
+}
