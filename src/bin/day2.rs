@@ -1,6 +1,6 @@
 #![feature(test)]
 
-use aoc2019::{Cell, IntCodeMachine};
+use aoc2019::machine::{Cell, IntCodeMachine};
 use benchtest::benchtest;
 
 const INPUT: &str = include_str!("data/day2.txt");
