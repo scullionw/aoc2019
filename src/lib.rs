@@ -36,28 +36,24 @@ impl TryFrom<char> for Mode {
 }
 
 enum Instruction {
-    Add { a: Mode, b: Mode, alu: Operation },
-    Mul { a: Mode, b: Mode, alu: Operation },
+    Add(Mode, Mode, Operation),
+    Mul(Mode, Mode, Operation),
     Input,
-    Output { a: Mode },
+    Output(Mode),
     Halt,
+    JumpNZ(Mode, Mode),
+    JumpZ(Mode, Mode),
+    LT(Mode, Mode),
+    EQ(Mode, Mode),
 }
 
 impl Instruction {
     fn add(a: Mode, b: Mode) -> Instruction {
-        Instruction::Add {
-            a,
-            b,
-            alu: Operation::Adder,
-        }
+        Instruction::Add(a, b, Operation::Adder)
     }
 
     fn mul(a: Mode, b: Mode) -> Instruction {
-        Instruction::Mul {
-            a,
-            b,
-            alu: Operation::Multiplier,
-        }
+        Instruction::Mul(a, b, Operation::Multiplier)
     }
 }
 
@@ -100,13 +96,17 @@ impl FromStr for Instruction {
 
         let mut modes = modes.chars().rev().map(|s| Mode::try_from(s).unwrap());
 
-        let mut next_mode = || modes.next().unwrap_or(Mode::Position);
+        let mut mode = || modes.next().unwrap_or(Mode::Position);
 
         match opcode.parse::<i64>().unwrap() {
-            1 => Ok(Instruction::add(next_mode(), next_mode())),
-            2 => Ok(Instruction::mul(next_mode(), next_mode())),
+            1 => Ok(Instruction::add(mode(), mode())),
+            2 => Ok(Instruction::mul(mode(), mode())),
             3 => Ok(Instruction::Input),
-            4 => Ok(Instruction::Output { a: next_mode() }),
+            4 => Ok(Instruction::Output(mode())),
+            5 => Ok(Instruction::JumpNZ(mode(), mode())),
+            6 => Ok(Instruction::JumpZ(mode(), mode())),
+            7 => Ok(Instruction::LT(mode(), mode())),
+            8 => Ok(Instruction::EQ(mode(), mode())),
             99 => Ok(Instruction::Halt),
             _ => Err(InstructionParseError),
         }
@@ -126,6 +126,10 @@ fn load(tape: &[Cell], cursor: usize, offset: usize, mode: Mode) -> i64 {
     }
 }
 
+fn store(tape: &mut [Cell], cursor: usize, offset: usize, value: i64) {
+    tape[tape[cursor + offset].value() as usize] = Cell::Value(value);
+}
+
 impl IntCodeMachine {
     pub fn add_input(&mut self, input: i64) {
         self.inputs.push(input);
@@ -136,7 +140,6 @@ impl IntCodeMachine {
     }
 
     pub fn errors(&self) -> bool {
-        dbg!(&self.outputs);
         let len = self.outputs.len();
         self.outputs[..len - 1].iter().any(|&output| output != 0)
     }
@@ -151,23 +154,47 @@ impl IntCodeMachine {
 
         loop {
             match tape[cursor].instruction() {
-                Instruction::Add { a, b, alu } | Instruction::Mul { a, b, alu } => {
-                    let a = load(tape, cursor, 1, a);
-                    let b = load(tape, cursor, 2, b);
-                    tape[tape[cursor + 3].value() as usize] = Cell::Value({ alu.op(a, b) });
+                Instruction::Add(mode_1, mode_2, alu) | Instruction::Mul(mode_1, mode_2, alu) => {
+                    let a = load(tape, cursor, 1, mode_1);
+                    let b = load(tape, cursor, 2, mode_2);
+                    store(tape, cursor, 3, alu.op(a, b));
                     cursor += 4
                 }
-                Instruction::Halt => break,
                 Instruction::Input => {
-                    let input = self.inputs.pop().expect("Not enough inputs provided!");
-                    tape[tape[cursor + 1].value() as usize] = Cell::Value(input);
+                    store(tape, cursor, 1, self.inputs.pop().unwrap());
                     cursor += 2;
                 }
-                Instruction::Output { a } => {
-                    let v = load(tape, cursor, 1, a);
-                    self.outputs.push(v);
+                Instruction::Output(mode) => {
+                    self.outputs.push(load(tape, cursor, 1, mode));
                     cursor += 2
                 }
+                Instruction::JumpNZ(mode_1, mode_2) => {
+                    if load(tape, cursor, 1, mode_1) != 0 {
+                        cursor = load(tape, cursor, 2, mode_2) as usize;
+                    } else {
+                        cursor += 3;
+                    }
+                }
+                Instruction::JumpZ(mode_1, mode_2) => {
+                    if load(tape, cursor, 1, mode_1) == 0 {
+                        cursor = load(tape, cursor, 2, mode_2) as usize;
+                    } else {
+                        cursor += 3
+                    }
+                }
+                Instruction::LT(mode_1, mode_2) => {
+                    let a = load(tape, cursor, 1, mode_1);
+                    let b = load(tape, cursor, 2, mode_2);
+                    store(tape, cursor, 3, if a < b { 1 } else { 0 });
+                    cursor += 4;
+                }
+                Instruction::EQ(mode_1, mode_2) => {
+                    let a = load(tape, cursor, 1, mode_1);
+                    let b = load(tape, cursor, 2, mode_2);
+                    store(tape, cursor, 3, if a == b { 1 } else { 0 });
+                    cursor += 4;
+                }
+                Instruction::Halt => break,
             }
         }
 
