@@ -6,20 +6,6 @@ enum Mode {
     Immediate,
 }
 
-enum Operation {
-    Adder,
-    Multiplier,
-}
-
-impl Operation {
-    fn op(&self, a: i64, b: i64) -> i64 {
-        match self {
-            Operation::Adder => a + b,
-            Operation::Multiplier => a * b,
-        }
-    }
-}
-
 #[derive(Debug)]
 struct ModeParseError;
 
@@ -36,8 +22,8 @@ impl TryFrom<char> for Mode {
 }
 
 enum Instruction {
-    Add(Mode, Mode, Operation),
-    Mul(Mode, Mode, Operation),
+    Add(Mode, Mode),
+    Mul(Mode, Mode),
     Input,
     Output(Mode),
     Halt,
@@ -45,16 +31,6 @@ enum Instruction {
     JumpZ(Mode, Mode),
     LT(Mode, Mode),
     EQ(Mode, Mode),
-}
-
-impl Instruction {
-    fn add(a: Mode, b: Mode) -> Instruction {
-        Instruction::Add(a, b, Operation::Adder)
-    }
-
-    fn mul(a: Mode, b: Mode) -> Instruction {
-        Instruction::Mul(a, b, Operation::Multiplier)
-    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -99,8 +75,8 @@ impl FromStr for Instruction {
         let mut mode = || modes.next().unwrap_or(Mode::Position);
 
         match opcode.parse::<i64>().unwrap() {
-            1 => Ok(Instruction::add(mode(), mode())),
-            2 => Ok(Instruction::mul(mode(), mode())),
+            1 => Ok(Instruction::Add(mode(), mode())),
+            2 => Ok(Instruction::Mul(mode(), mode())),
             3 => Ok(Instruction::Input),
             4 => Ok(Instruction::Output(mode())),
             5 => Ok(Instruction::JumpNZ(mode(), mode())),
@@ -154,10 +130,16 @@ impl IntCodeMachine {
 
         loop {
             match tape[cursor].instruction() {
-                Instruction::Add(mode_1, mode_2, alu) | Instruction::Mul(mode_1, mode_2, alu) => {
+                Instruction::Add(mode_1, mode_2) => {
                     let a = load(tape, cursor, 1, mode_1);
                     let b = load(tape, cursor, 2, mode_2);
-                    store(tape, cursor, 3, alu.op(a, b));
+                    store(tape, cursor, 3, a + b);
+                    cursor += 4
+                }
+                Instruction::Mul(mode_1, mode_2) => {
+                    let a = load(tape, cursor, 1, mode_1);
+                    let b = load(tape, cursor, 2, mode_2);
+                    store(tape, cursor, 3, a * b);
                     cursor += 4
                 }
                 Instruction::Input => {
